@@ -1,0 +1,11 @@
+[Desktop Entry]
+Name=Project Overview
+Comment=An application for the COSMIC™ desktop
+Type=Application
+Icon=at.tobinio.ProjectOverview
+Exec=project-overview %F
+Terminal=false
+StartupNotify=true
+Categories=COSMIC
+Keywords=COSMIC
+MimeType=
