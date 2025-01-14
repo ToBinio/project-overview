@@ -1,12 +1,13 @@
 use crate::config::Config;
 use crate::fl;
 use cosmic::app::{context_drawer, Core, Task};
-use cosmic::cosmic_config::{self, CosmicConfigEntry};
+use cosmic::cosmic_config::{self};
 use cosmic::iced::alignment::{Horizontal, Vertical};
 use cosmic::iced::{Alignment, Length, Subscription};
 use cosmic::widget::{self, menu};
 use cosmic::{cosmic_theme, theme, Application, ApplicationExt, Apply, Element};
 use std::collections::HashMap;
+use std::path::PathBuf;
 
 const REPOSITORY: &str = env!("CARGO_PKG_REPOSITORY");
 const APP_ICON: &[u8] = include_bytes!("../resources/icons/hicolor/scalable/apps/icon.svg");
@@ -19,15 +20,23 @@ pub struct AppModel {
     /// Key bindings for the application's menu bar.
     key_binds: HashMap<menu::KeyBind, MenuAction>,
     // Configuration data that persists between application runs.
+    config_handler: Option<cosmic_config::Config>,
     config: Config,
+
+    root_path_input: String,
 }
 
 #[derive(Debug, Clone)]
 pub enum Message {
     OpenContextDrawer(ContextPage),
     CloseContextDrawer,
-    UpdateConfig(Config),
+
     LaunchUrl(String),
+
+    UpdateConfig(Config),
+
+    RootPathInputChanged(String),
+    RootPathSave(PathBuf),
 }
 
 impl Application for AppModel {
@@ -48,17 +57,25 @@ impl Application for AppModel {
     }
 
     fn init(core: Core, _flags: Self::Flags) -> (Self, Task<Self::Message>) {
+        let (config_handler, config) = Config::load();
+
+        let path = config
+            .project_root_path()
+            .map(|path| path.to_str().unwrap_or_default())
+            .unwrap_or_default()
+            .to_string();
+
         let mut app = AppModel {
             core,
             context_page: ContextPage::default(),
             key_binds: HashMap::new(),
             // Optional configuration file for an application.
-            config: cosmic_config::Config::new(Self::APP_ID, Config::VERSION)
-                .map(|context| {
-                    Config::get_entry(&context).unwrap_or_else(|(_errors, config)| config)
-                })
-                .unwrap_or_default(),
+            config_handler,
+            config,
+            root_path_input: path,
         };
+
+        println!("{:?}", app.config.project_root_path());
 
         let command = app.update_title();
 
@@ -75,6 +92,10 @@ impl Application for AppModel {
                 context_drawer::context_drawer(self.about(), Message::CloseContextDrawer)
                     .title(fl!("about"))
             }
+            ContextPage::Settings => {
+                context_drawer::context_drawer(self.settings(), Message::CloseContextDrawer)
+                    .title(fl!("settings"))
+            }
         })
     }
 
@@ -83,7 +104,10 @@ impl Application for AppModel {
             menu::root(fl!("view")),
             menu::items(
                 &self.key_binds,
-                vec![menu::Item::Button(fl!("about"), None, MenuAction::About)],
+                vec![
+                    menu::Item::Button(fl!("about"), None, MenuAction::About),
+                    menu::Item::Button(fl!("settings"), None, MenuAction::Settings),
+                ],
             ),
         )]);
 
@@ -114,6 +138,15 @@ impl Application for AppModel {
                     eprintln!("failed to open {url:?}: {err}");
                 }
             },
+            Message::RootPathInputChanged(path) => {
+                self.root_path_input = path;
+            }
+            Message::RootPathSave(path) => {
+                println!("saving root path - {:?}", path);
+                let _ = self
+                    .config
+                    .set_project_root_path(self.config_handler.as_ref().unwrap(), Some(path));
+            }
         }
         Task::none()
     }
@@ -163,6 +196,27 @@ impl AppModel {
             .into()
     }
 
+    pub fn settings(&self) -> Element<Message> {
+        let cosmic_theme::Spacing { space_xxs, .. } = theme::active().cosmic().spacing;
+
+        let path_buf = PathBuf::from(&self.root_path_input);
+
+        let input = widget::text_input(fl!("settings-path-placeholder"), &self.root_path_input)
+            .on_input(Message::RootPathInputChanged);
+
+        let mut save = widget::button::text(fl!("save"));
+
+        if path_buf.exists() {
+            save = save.on_press(Message::RootPathSave(path_buf));
+        }
+
+        widget::column()
+            .push(input)
+            .push(save)
+            .spacing(space_xxs)
+            .into()
+    }
+
     pub fn update_title(&mut self) -> Task<Message> {
         let window_title = fl!("app-title");
 
@@ -178,11 +232,13 @@ impl AppModel {
 pub enum ContextPage {
     #[default]
     About,
+    Settings,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum MenuAction {
     About,
+    Settings,
 }
 
 impl menu::action::MenuAction for MenuAction {
@@ -191,6 +247,7 @@ impl menu::action::MenuAction for MenuAction {
     fn message(&self) -> Self::Message {
         match self {
             MenuAction::About => Message::OpenContextDrawer(ContextPage::About),
+            MenuAction::Settings => Message::OpenContextDrawer(ContextPage::Settings),
         }
     }
 }
