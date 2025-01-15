@@ -1,16 +1,21 @@
+use crate::app::context_page::ContextPage;
+use crate::app::menu_action::MenuAction;
 use crate::config::Config;
 use crate::fl;
 use cosmic::app::{context_drawer, Core, Task};
 use cosmic::cosmic_config::{self};
-use cosmic::iced::alignment::{Horizontal, Vertical};
-use cosmic::iced::{Alignment, Length, Subscription};
+use cosmic::iced::{Length, Subscription};
 use cosmic::widget::{self, menu};
-use cosmic::{cosmic_theme, theme, Application, ApplicationExt, Apply, Element};
+use cosmic::{cosmic_theme, theme, Application, ApplicationExt, Element};
 use std::collections::HashMap;
+use std::fs::read_dir;
 use std::path::PathBuf;
 
+mod context_page;
+mod menu_action;
+
 const REPOSITORY: &str = env!("CARGO_PKG_REPOSITORY");
-const APP_ICON: &[u8] = include_bytes!("../resources/icons/hicolor/scalable/apps/icon.svg");
+const APP_ICON: &[u8] = include_bytes!("../../resources/icons/hicolor/scalable/apps/icon.svg");
 
 pub struct AppModel {
     /// Application state which is managed by the COSMIC runtime.
@@ -24,6 +29,7 @@ pub struct AppModel {
     config: Config,
 
     root_path_input: String,
+    projects: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -37,6 +43,8 @@ pub enum Message {
 
     RootPathInputChanged(String),
     RootPathSave(PathBuf),
+
+    UpdateProjects,
 }
 
 impl Application for AppModel {
@@ -73,13 +81,18 @@ impl Application for AppModel {
             config_handler,
             config,
             root_path_input: path,
+            projects: vec![],
         };
 
         println!("{:?}", app.config.project_root_path());
 
-        let command = app.update_title();
+        let update_title_task = app.update_title();
+        let task = Task::batch(vec![
+            update_title_task,
+            Task::done(cosmic::app::Message::App(Message::UpdateProjects)),
+        ]);
 
-        (app, command)
+        (app, task)
     }
 
     fn context_drawer(&self) -> Option<context_drawer::ContextDrawer<Self::Message>> {
@@ -87,16 +100,7 @@ impl Application for AppModel {
             return None;
         }
 
-        Some(match self.context_page {
-            ContextPage::About => {
-                context_drawer::context_drawer(self.about(), Message::CloseContextDrawer)
-                    .title(fl!("about"))
-            }
-            ContextPage::Settings => {
-                context_drawer::context_drawer(self.settings(), Message::CloseContextDrawer)
-                    .title(fl!("settings"))
-            }
-        })
+        Some(self.context_page.view(self))
     }
 
     fn header_start(&self) -> Vec<Element<Self::Message>> {
@@ -147,76 +151,39 @@ impl Application for AppModel {
                     .config
                     .set_project_root_path(self.config_handler.as_ref().unwrap(), Some(path));
             }
+            Message::UpdateProjects => {
+                let Some(path) = self.config.project_root_path() else {
+                    return Task::none();
+                };
+
+                let result = read_dir(path).unwrap();
+
+                self.projects = result
+                    .filter_map(|dir| dir.ok())
+                    .filter_map(|dir| dir.file_name().to_str().map(|name| name.to_string()))
+                    .collect();
+            }
         }
         Task::none()
     }
 
     fn view(&self) -> Element<Self::Message> {
-        widget::text::title1(fl!("welcome"))
-            .apply(widget::container)
+        let cosmic_theme::Spacing { space_xxs, .. } = theme::active().cosmic().spacing;
+
+        let mut column = widget::Column::new().spacing(space_xxs);
+
+        for name in &self.projects {
+            column = column.push(widget::text::text(name));
+        }
+
+        widget::scrollable(column)
             .width(Length::Fill)
             .height(Length::Fill)
-            .align_x(Horizontal::Center)
-            .align_y(Vertical::Center)
             .into()
     }
 }
 
 impl AppModel {
-    pub fn about(&self) -> Element<Message> {
-        let cosmic_theme::Spacing { space_xxs, .. } = theme::active().cosmic().spacing;
-
-        let icon = widget::svg(widget::svg::Handle::from_memory(APP_ICON));
-
-        let title = widget::text::title3(fl!("app-title"));
-
-        let hash = env!("VERGEN_GIT_SHA");
-        let short_hash: String = hash.chars().take(7).collect();
-        let date = env!("VERGEN_GIT_COMMIT_DATE");
-
-        let link = widget::button::link(REPOSITORY)
-            .on_press(Message::LaunchUrl(REPOSITORY.to_string()))
-            .padding(0);
-
-        widget::column()
-            .push(icon)
-            .push(title)
-            .push(link)
-            .push(
-                widget::button::link(fl!(
-                    "git-description",
-                    hash = short_hash.as_str(),
-                    date = date
-                ))
-                .on_press(Message::LaunchUrl(format!("{REPOSITORY}/commits/{hash}")))
-                .padding(0),
-            )
-            .align_x(Alignment::Center)
-            .spacing(space_xxs)
-            .into()
-    }
-
-    pub fn settings(&self) -> Element<Message> {
-        let cosmic_theme::Spacing { space_xxs, .. } = theme::active().cosmic().spacing;
-
-        let path_buf = PathBuf::from(&self.root_path_input);
-
-        let input = widget::text_input(fl!("settings-path-placeholder"), &self.root_path_input)
-            .on_input(Message::RootPathInputChanged);
-
-        let mut save = widget::button::text(fl!("save"));
-
-        if path_buf.exists() {
-            save = save.on_press(Message::RootPathSave(path_buf));
-        }
-
-        widget::column()
-            .push(input)
-            .push(save)
-            .spacing(space_xxs)
-            .into()
-    }
-
     pub fn update_title(&mut self) -> Task<Message> {
         let window_title = fl!("app-title");
 
@@ -224,30 +191,6 @@ impl AppModel {
             self.set_window_title(window_title, id)
         } else {
             Task::none()
-        }
-    }
-}
-
-#[derive(Copy, Clone, Debug, Default, Eq, PartialEq)]
-pub enum ContextPage {
-    #[default]
-    About,
-    Settings,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum MenuAction {
-    About,
-    Settings,
-}
-
-impl menu::action::MenuAction for MenuAction {
-    type Message = Message;
-
-    fn message(&self) -> Self::Message {
-        match self {
-            MenuAction::About => Message::OpenContextDrawer(ContextPage::About),
-            MenuAction::Settings => Message::OpenContextDrawer(ContextPage::Settings),
         }
     }
 }

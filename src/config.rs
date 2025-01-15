@@ -1,6 +1,9 @@
 use std::path::PathBuf;
 
-use cosmic::{cosmic_config::{self, cosmic_config_derive::CosmicConfigEntry, CosmicConfigEntry}, Application};
+use cosmic::{
+    cosmic_config::{self, cosmic_config_derive::CosmicConfigEntry, CosmicConfigEntry},
+    Application,
+};
 
 use crate::app::AppModel;
 
@@ -30,7 +33,7 @@ impl Config {
         }
     }
 
-    pub fn project_root_path(&self) -> Option<&PathBuf>{
+    pub fn project_root_path(&self) -> Option<&PathBuf> {
         self.project_root_path.as_ref()
     }
 }
