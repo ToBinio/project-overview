@@ -1,6 +1,7 @@
 use crate::app::context_page::ContextPage;
 use crate::app::menu_action::MenuAction;
 use crate::config::Config;
+use crate::domain::program::Program;
 use crate::fl;
 use cosmic::app::{context_drawer, Core, Task};
 use cosmic::cosmic_config::{self};
@@ -29,7 +30,10 @@ pub struct AppModel {
     config: Config,
 
     root_path_input: String,
+    command_input: String,
+
     projects: Vec<String>,
+    programs: Vec<Program>,
 }
 
 #[derive(Debug, Clone)]
@@ -43,6 +47,9 @@ pub enum Message {
 
     RootPathInputChanged(String),
     RootPathSave(PathBuf),
+
+    CommandInputChanged(String),
+    ProgramSave,
 
     UpdateProjects,
 }
@@ -81,7 +88,12 @@ impl Application for AppModel {
             config_handler,
             config,
             root_path_input: path,
+            command_input: "".to_string(),
             projects: vec![],
+            programs: vec![
+                Program::new("something".to_string()),
+                Program::new("other program".to_string()),
+            ],
         };
 
         println!("{:?}", app.config.project_root_path());
@@ -150,6 +162,12 @@ impl Application for AppModel {
                 let _ = self
                     .config
                     .set_project_root_path(self.config_handler.as_ref().unwrap(), Some(path));
+            }
+            Message::CommandInputChanged(cmd) => {
+                self.command_input = cmd;
+            }
+            Message::ProgramSave => {
+                println!("saving program");
             }
             Message::UpdateProjects => {
                 let Some(path) = self.config.project_root_path() else {

@@ -1,5 +1,6 @@
 mod app;
 mod config;
+pub mod domain;
 mod i18n;
 fn main() -> cosmic::iced::Result {
     // Get the system's preferred languages.

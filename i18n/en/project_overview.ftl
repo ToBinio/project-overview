@@ -7,3 +7,7 @@ git-description = Git commit {$hash} on {$date}
 settings = settings
 settings-path-placeholder = enter root-path
 save = save
+
+settings-program-placeholder = enter program command
+add = add
+
