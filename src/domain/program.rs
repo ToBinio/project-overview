@@ -11,6 +11,6 @@ impl Program {
         &self.command
     }
     pub fn is_valid_command(command: &str) -> bool {
-        false
+        command.contains("%path%")
     }
 }

@@ -91,8 +91,8 @@ impl Application for AppModel {
             command_input: "".to_string(),
             projects: vec![],
             programs: vec![
-                Program::new("something".to_string()),
-                Program::new("other program".to_string()),
+                Program::new("zed %path%".to_string()),
+                Program::new("webstorm %path%".to_string()),
             ],
         };
 
@@ -167,7 +167,8 @@ impl Application for AppModel {
                 self.command_input = cmd;
             }
             Message::ProgramSave => {
-                println!("saving program");
+                self.programs.push(Program::new(self.command_input.clone()));
+                self.command_input = "".to_string();
             }
             Message::UpdateProjects => {
                 let Some(path) = self.config.project_root_path() else {
