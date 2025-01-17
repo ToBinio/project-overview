@@ -80,6 +80,8 @@ impl Application for AppModel {
             .unwrap_or_default()
             .to_string();
 
+        let programs = config.programs().to_vec();
+
         let mut app = AppModel {
             core,
             context_page: ContextPage::default(),
@@ -90,10 +92,7 @@ impl Application for AppModel {
             root_path_input: path,
             command_input: "".to_string(),
             projects: vec![],
-            programs: vec![
-                Program::new("zed %path%".to_string()),
-                Program::new("webstorm %path%".to_string()),
-            ],
+            programs,
         };
 
         println!("{:?}", app.config.project_root_path());
@@ -167,8 +166,16 @@ impl Application for AppModel {
                 self.command_input = cmd;
             }
             Message::ProgramSave => {
-                self.programs.push(Program::new(self.command_input.clone()));
+                let program = Program::new(self.command_input.clone());
+                println!("saving program - {:?}", program);
+
+                self.programs.push(program);
                 self.command_input = "".to_string();
+
+                let _ = self.config.set_programs(
+                    self.config_handler.as_ref().unwrap(),
+                    self.programs.to_vec(),
+                );
             }
             Message::UpdateProjects => {
                 let Some(path) = self.config.project_root_path() else {
