@@ -1,7 +1,10 @@
 use crate::app::{AppModel, Message, APP_ICON, REPOSITORY};
+use crate::domain::program::Program;
 use crate::fl;
 use cosmic::app::context_drawer;
 use cosmic::iced::Alignment;
+use cosmic::iced_core::Theme;
+use cosmic::widget::icon::Handle;
 use cosmic::{cosmic_theme, theme, widget, Element};
 use std::path::PathBuf;
 
@@ -59,7 +62,20 @@ impl ContextPage {
     }
 
     fn settings(app: &AppModel) -> Element<Message> {
-        let cosmic_theme::Spacing { space_xxs, .. } = theme::active().cosmic().spacing;
+        let theme = theme::active();
+        let cosmic_theme::Spacing { space_xs, .. } = theme.cosmic().spacing;
+
+        widget::column()
+            .push(Self::root_path(app, &theme))
+            .push(widget::divider::horizontal::default())
+            .push(Self::program_input(app, &theme))
+            .push(Self::programs(app, &theme))
+            .spacing(space_xs)
+            .into()
+    }
+
+    fn root_path<'a>(app: &'a AppModel, theme: &cosmic::Theme) -> Element<'a, Message> {
+        let cosmic_theme::Spacing { space_xxs, .. } = theme.cosmic().spacing;
 
         let path_buf = PathBuf::from(&app.root_path_input);
 
@@ -76,6 +92,69 @@ impl ContextPage {
             .push(input)
             .push(save)
             .spacing(space_xxs)
+            .into()
+    }
+
+    fn program_input<'a>(app: &'a AppModel, theme: &cosmic::Theme) -> Element<'a, Message> {
+        let cosmic_theme::Spacing { space_xxs, .. } = theme.cosmic().spacing;
+
+        let command_input = widget::text_input(
+            fl!("settings-program-command-placeholder"),
+            &app.program_command_input,
+        )
+        .on_input(Message::ProgramCommandInputChanged);
+
+        let name_input = widget::text_input(
+            fl!("settings-program-name-placeholder"),
+            &app.program_name_input,
+        )
+        .on_input(Message::ProgramNameInputChanged);
+        let mut add = widget::button::text(fl!("add"));
+
+        if app.is_valid_program() {
+            add = add.on_press(Message::ProgramSave);
+        }
+
+        widget::column()
+            .push(command_input)
+            .push(name_input)
+            .push(add)
+            .spacing(space_xxs)
+            .into()
+    }
+
+    fn programs<'a>(app: &'a AppModel, theme: &cosmic::Theme) -> Element<'a, Message> {
+        let cosmic_theme::Spacing { space_xxs, .. } = theme.cosmic().spacing;
+
+        let mut column = widget::column().spacing(space_xxs);
+
+        for program in &app.programs {
+            column = column.push(widget::divider::horizontal::light());
+            column = column.push(Self::program(app, theme, program));
+        }
+
+        column.into()
+    }
+
+    fn program<'a>(
+        _app: &'a AppModel,
+        theme: &cosmic::Theme,
+        program: &'a Program,
+    ) -> Element<'a, Message> {
+        let cosmic_theme::Spacing { space_xxs, .. } = theme.cosmic().spacing;
+
+        let name = widget::text::text(program.name());
+        let command = widget::text::caption(program.command());
+
+        let column = widget::column().push(name).push(command);
+
+        let delete_button = widget::button::icon(widget::icon::from_name("edit-delete-symbolic"))
+            .on_press(Message::ProgramDelete(program.name().to_string()));
+
+        widget::row()
+            .spacing(space_xxs)
+            .push(column)
+            .push(delete_button)
             .into()
     }
 }

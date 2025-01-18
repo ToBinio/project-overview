@@ -1,6 +1,7 @@
 use crate::app::context_page::ContextPage;
 use crate::app::menu_action::MenuAction;
 use crate::config::Config;
+use crate::domain::program::Program;
 use crate::fl;
 use cosmic::app::{context_drawer, Core, Task};
 use cosmic::cosmic_config::{self};
@@ -9,7 +10,9 @@ use cosmic::widget::{self, menu};
 use cosmic::{cosmic_theme, theme, Application, ApplicationExt, Element};
 use std::collections::HashMap;
 use std::fs::read_dir;
+use std::ops::Not;
 use std::path::PathBuf;
+use std::process::{Command, Stdio};
 
 mod context_page;
 mod menu_action;
@@ -29,7 +32,11 @@ pub struct AppModel {
     config: Config,
 
     root_path_input: String,
+    program_command_input: String,
+    program_name_input: String,
+
     projects: Vec<String>,
+    programs: Vec<Program>,
 }
 
 #[derive(Debug, Clone)]
@@ -44,7 +51,17 @@ pub enum Message {
     RootPathInputChanged(String),
     RootPathSave(PathBuf),
 
+    ProgramCommandInputChanged(String),
+    ProgramNameInputChanged(String),
+    ProgramSave,
+    ProgramDelete(String),
+
     UpdateProjects,
+
+    LaunchProject {
+        project_name: String,
+        program_name: String,
+    },
 }
 
 impl Application for AppModel {
@@ -73,6 +90,8 @@ impl Application for AppModel {
             .unwrap_or_default()
             .to_string();
 
+        let programs = config.programs().to_vec();
+
         let mut app = AppModel {
             core,
             context_page: ContextPage::default(),
@@ -81,7 +100,10 @@ impl Application for AppModel {
             config_handler,
             config,
             root_path_input: path,
+            program_command_input: "".to_string(),
+            program_name_input: "".to_string(),
             projects: vec![],
+            programs,
         };
 
         println!("{:?}", app.config.project_root_path());
@@ -142,6 +164,34 @@ impl Application for AppModel {
                     eprintln!("failed to open {url:?}: {err}");
                 }
             },
+            Message::LaunchProject {
+                program_name,
+                project_name,
+            } => {
+                let Some(program) = self
+                    .programs
+                    .iter()
+                    .find(|program| program.name() == &program_name)
+                else {
+                    return Task::none();
+                };
+
+                let mut path = self.config.project_root_path().unwrap().clone();
+                path.push(project_name);
+
+                let command = program.command().replace("%path%", path.to_str().unwrap());
+                let mut command = command.split_whitespace();
+
+                let exec = command.next().unwrap();
+                let args: Vec<&str> = command.collect();
+
+                Command::new(exec)
+                    .args(args)
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null())
+                    .spawn()
+                    .unwrap();
+            }
             Message::RootPathInputChanged(path) => {
                 self.root_path_input = path;
             }
@@ -150,6 +200,29 @@ impl Application for AppModel {
                 let _ = self
                     .config
                     .set_project_root_path(self.config_handler.as_ref().unwrap(), Some(path));
+            }
+            Message::ProgramCommandInputChanged(cmd) => {
+                self.program_command_input = cmd;
+            }
+            Message::ProgramNameInputChanged(name) => {
+                self.program_name_input = name;
+            }
+            Message::ProgramSave => {
+                let program = Program::new(
+                    self.program_name_input.clone(),
+                    self.program_command_input.clone(),
+                );
+                println!("saving program - {:?}", program);
+
+                self.programs.push(program);
+                self.program_command_input = "".to_string();
+                self.program_name_input = "".to_string();
+
+                self.save_programs();
+            }
+            Message::ProgramDelete(name) => {
+                self.programs.retain(|program| program.name() != &name);
+                self.save_programs();
             }
             Message::UpdateProjects => {
                 let Some(path) = self.config.project_root_path() else {
@@ -168,15 +241,17 @@ impl Application for AppModel {
     }
 
     fn view(&self) -> Element<Self::Message> {
-        let cosmic_theme::Spacing { space_xxs, .. } = theme::active().cosmic().spacing;
+        let theme = theme::active();
+        let cosmic_theme::Spacing { space_xs, .. } = theme.cosmic().spacing;
 
-        let mut column = widget::Column::new().spacing(space_xxs);
+        let mut column = widget::Column::new();
 
         for name in &self.projects {
-            column = column.push(widget::text::text(name));
+            column = column.push(self.project(name));
         }
 
         widget::scrollable(column)
+            .spacing(space_xs)
             .width(Length::Fill)
             .height(Length::Fill)
             .into()
@@ -184,6 +259,24 @@ impl Application for AppModel {
 }
 
 impl AppModel {
+    fn project<'a>(&'a self, project: &'a str) -> Element<'a, Message> {
+        let mut programs = widget::Row::new();
+
+        for program in &self.programs {
+            programs = programs.push(widget::button::text(program.name()).on_press(
+                Message::LaunchProject {
+                    program_name: program.name().to_string(),
+                    project_name: project.to_string(),
+                },
+            ));
+        }
+
+        widget::Column::new()
+            .push(widget::text::text(project))
+            .push(programs)
+            .into()
+    }
+
     pub fn update_title(&mut self) -> Task<Message> {
         let window_title = fl!("app-title");
 
@@ -192,5 +285,21 @@ impl AppModel {
         } else {
             Task::none()
         }
+    }
+
+    fn save_programs(&mut self) {
+        let _ = self.config.set_programs(
+            self.config_handler.as_ref().unwrap(),
+            self.programs.to_vec(),
+        );
+    }
+
+    pub fn is_valid_program(&self) -> bool {
+        let name = &self.program_name_input;
+        let command = &self.program_command_input;
+
+        name.is_empty().not()
+            && Program::is_valid_command(command)
+            && self.programs.iter().any(|p| p.name() == name).not()
     }
 }
