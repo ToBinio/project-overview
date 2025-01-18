@@ -1,6 +1,5 @@
 use crate::app::context_page::ContextPage;
 use crate::app::menu_action::MenuAction;
-use crate::app::Message::ProgramDelete;
 use crate::config::Config;
 use crate::domain::program::Program;
 use crate::fl;
@@ -13,6 +12,7 @@ use std::collections::HashMap;
 use std::fs::read_dir;
 use std::ops::Not;
 use std::path::PathBuf;
+use std::process::{Command, Stdio};
 
 mod context_page;
 mod menu_action;
@@ -57,6 +57,11 @@ pub enum Message {
     ProgramDelete(String),
 
     UpdateProjects,
+
+    LaunchProject {
+        project_name: String,
+        program_name: String,
+    },
 }
 
 impl Application for AppModel {
@@ -159,6 +164,34 @@ impl Application for AppModel {
                     eprintln!("failed to open {url:?}: {err}");
                 }
             },
+            Message::LaunchProject {
+                program_name,
+                project_name,
+            } => {
+                let Some(program) = self
+                    .programs
+                    .iter()
+                    .find(|program| program.name() == &program_name)
+                else {
+                    return Task::none();
+                };
+
+                let mut path = self.config.project_root_path().unwrap().clone();
+                path.push(project_name);
+
+                let command = program.command().replace("%path%", path.to_str().unwrap());
+                let mut command = command.split_whitespace();
+
+                let exec = command.next().unwrap();
+                let args: Vec<&str> = command.collect();
+
+                Command::new(exec)
+                    .args(args)
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null())
+                    .spawn()
+                    .unwrap();
+            }
             Message::RootPathInputChanged(path) => {
                 self.root_path_input = path;
             }
@@ -208,15 +241,17 @@ impl Application for AppModel {
     }
 
     fn view(&self) -> Element<Self::Message> {
-        let cosmic_theme::Spacing { space_xxs, .. } = theme::active().cosmic().spacing;
+        let theme = theme::active();
+        let cosmic_theme::Spacing { space_xs, .. } = theme.cosmic().spacing;
 
-        let mut column = widget::Column::new().spacing(space_xxs);
+        let mut column = widget::Column::new();
 
         for name in &self.projects {
-            column = column.push(widget::text::text(name));
+            column = column.push(self.project(name));
         }
 
         widget::scrollable(column)
+            .spacing(space_xs)
             .width(Length::Fill)
             .height(Length::Fill)
             .into()
@@ -224,6 +259,24 @@ impl Application for AppModel {
 }
 
 impl AppModel {
+    fn project<'a>(&'a self, project: &'a str) -> Element<'a, Message> {
+        let mut programs = widget::Row::new();
+
+        for program in &self.programs {
+            programs = programs.push(widget::button::text(program.name()).on_press(
+                Message::LaunchProject {
+                    program_name: program.name().to_string(),
+                    project_name: project.to_string(),
+                },
+            ));
+        }
+
+        widget::Column::new()
+            .push(widget::text::text(project))
+            .push(programs)
+            .into()
+    }
+
     pub fn update_title(&mut self) -> Task<Message> {
         let window_title = fl!("app-title");
 
