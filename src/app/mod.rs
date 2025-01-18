@@ -1,5 +1,6 @@
 use crate::app::context_page::ContextPage;
 use crate::app::menu_action::MenuAction;
+use crate::app::Message::ProgramDelete;
 use crate::config::Config;
 use crate::domain::program::Program;
 use crate::fl;
@@ -10,6 +11,7 @@ use cosmic::widget::{self, menu};
 use cosmic::{cosmic_theme, theme, Application, ApplicationExt, Element};
 use std::collections::HashMap;
 use std::fs::read_dir;
+use std::ops::Not;
 use std::path::PathBuf;
 
 mod context_page;
@@ -30,7 +32,8 @@ pub struct AppModel {
     config: Config,
 
     root_path_input: String,
-    command_input: String,
+    program_command_input: String,
+    program_name_input: String,
 
     projects: Vec<String>,
     programs: Vec<Program>,
@@ -48,8 +51,10 @@ pub enum Message {
     RootPathInputChanged(String),
     RootPathSave(PathBuf),
 
-    CommandInputChanged(String),
+    ProgramCommandInputChanged(String),
+    ProgramNameInputChanged(String),
     ProgramSave,
+    ProgramDelete(String),
 
     UpdateProjects,
 }
@@ -90,7 +95,8 @@ impl Application for AppModel {
             config_handler,
             config,
             root_path_input: path,
-            command_input: "".to_string(),
+            program_command_input: "".to_string(),
+            program_name_input: "".to_string(),
             projects: vec![],
             programs,
         };
@@ -162,20 +168,28 @@ impl Application for AppModel {
                     .config
                     .set_project_root_path(self.config_handler.as_ref().unwrap(), Some(path));
             }
-            Message::CommandInputChanged(cmd) => {
-                self.command_input = cmd;
+            Message::ProgramCommandInputChanged(cmd) => {
+                self.program_command_input = cmd;
+            }
+            Message::ProgramNameInputChanged(name) => {
+                self.program_name_input = name;
             }
             Message::ProgramSave => {
-                let program = Program::new(self.command_input.clone());
+                let program = Program::new(
+                    self.program_name_input.clone(),
+                    self.program_command_input.clone(),
+                );
                 println!("saving program - {:?}", program);
 
                 self.programs.push(program);
-                self.command_input = "".to_string();
+                self.program_command_input = "".to_string();
+                self.program_name_input = "".to_string();
 
-                let _ = self.config.set_programs(
-                    self.config_handler.as_ref().unwrap(),
-                    self.programs.to_vec(),
-                );
+                self.save_programs();
+            }
+            Message::ProgramDelete(name) => {
+                self.programs.retain(|program| program.name() != &name);
+                self.save_programs();
             }
             Message::UpdateProjects => {
                 let Some(path) = self.config.project_root_path() else {
@@ -218,5 +232,21 @@ impl AppModel {
         } else {
             Task::none()
         }
+    }
+
+    fn save_programs(&mut self) {
+        let _ = self.config.set_programs(
+            self.config_handler.as_ref().unwrap(),
+            self.programs.to_vec(),
+        );
+    }
+
+    pub fn is_valid_program(&self) -> bool {
+        let name = &self.program_name_input;
+        let command = &self.program_command_input;
+
+        name.is_empty().not()
+            && Program::is_valid_command(command)
+            && self.programs.iter().any(|p| p.name() == name).not()
     }
 }

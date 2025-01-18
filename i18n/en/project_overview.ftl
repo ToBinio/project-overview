@@ -8,6 +8,7 @@ settings = settings
 settings-path-placeholder = enter root-path
 save = save
 
-settings-program-placeholder = enter program command
+settings-program-command-placeholder = enter program command
+settings-program-name-placeholder = enter program name
 add = add
 

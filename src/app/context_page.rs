@@ -4,6 +4,7 @@ use crate::fl;
 use cosmic::app::context_drawer;
 use cosmic::iced::Alignment;
 use cosmic::iced_core::Theme;
+use cosmic::widget::icon::Handle;
 use cosmic::{cosmic_theme, theme, widget, Element};
 use std::path::PathBuf;
 
@@ -97,16 +98,26 @@ impl ContextPage {
     fn program_input<'a>(app: &'a AppModel, theme: &cosmic::Theme) -> Element<'a, Message> {
         let cosmic_theme::Spacing { space_xxs, .. } = theme.cosmic().spacing;
 
-        let input = widget::text_input(fl!("settings-program-placeholder"), &app.command_input)
-            .on_input(Message::CommandInputChanged);
+        let command_input = widget::text_input(
+            fl!("settings-program-command-placeholder"),
+            &app.program_command_input,
+        )
+        .on_input(Message::ProgramCommandInputChanged);
+
+        let name_input = widget::text_input(
+            fl!("settings-program-name-placeholder"),
+            &app.program_name_input,
+        )
+        .on_input(Message::ProgramNameInputChanged);
         let mut add = widget::button::text(fl!("add"));
 
-        if Program::is_valid_command(&app.command_input) {
+        if app.is_valid_program() {
             add = add.on_press(Message::ProgramSave);
         }
 
         widget::column()
-            .push(input)
+            .push(command_input)
+            .push(name_input)
             .push(add)
             .spacing(space_xxs)
             .into()
@@ -119,9 +130,31 @@ impl ContextPage {
 
         for program in &app.programs {
             column = column.push(widget::divider::horizontal::light());
-            column = column.push(widget::text::text(program.command()));
+            column = column.push(Self::program(app, theme, program));
         }
 
         column.into()
+    }
+
+    fn program<'a>(
+        _app: &'a AppModel,
+        theme: &cosmic::Theme,
+        program: &'a Program,
+    ) -> Element<'a, Message> {
+        let cosmic_theme::Spacing { space_xxs, .. } = theme.cosmic().spacing;
+
+        let name = widget::text::text(program.name());
+        let command = widget::text::caption(program.command());
+
+        let column = widget::column().push(name).push(command);
+
+        let delete_button = widget::button::icon(widget::icon::from_name("edit-delete-symbolic"))
+            .on_press(Message::ProgramDelete(program.name().to_string()));
+
+        widget::row()
+            .spacing(space_xxs)
+            .push(column)
+            .push(delete_button)
+            .into()
     }
 }
