@@ -6,6 +6,7 @@ use cosmic::{
     cosmic_config::{self, cosmic_config_derive::CosmicConfigEntry, CosmicConfigEntry},
     Application,
 };
+use log::error;
 
 #[derive(Debug, Default, Clone, CosmicConfigEntry, Eq, PartialEq)]
 #[version = 1]
@@ -18,17 +19,14 @@ impl Config {
     pub fn load() -> (Option<cosmic_config::Config>, Self) {
         match cosmic_config::Config::new(AppModel::APP_ID, Config::VERSION) {
             Ok(config_handler) => {
-                let config = match Config::get_entry(&config_handler) {
-                    Ok(ok) => ok,
-                    Err((errs, config)) => {
-                        eprintln!("{:?}", errs);
-                        config
-                    }
-                };
+                let config = Config::get_entry(&config_handler).unwrap_or_else(|(errs, config)| {
+                    error!("{:?}", errs);
+                    config
+                });
                 (Some(config_handler), config)
             }
             Err(err) => {
-                eprintln!("{:?}", err);
+                error!("{:?}", err);
                 (None, Config::default())
             }
         }

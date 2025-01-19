@@ -8,6 +8,7 @@ use cosmic::cosmic_config::{self};
 use cosmic::iced::{Length, Subscription};
 use cosmic::widget::{self, menu};
 use cosmic::{cosmic_theme, theme, Application, ApplicationExt, Element};
+use log::{error, info};
 use std::collections::HashMap;
 use std::fs::read_dir;
 use std::ops::Not;
@@ -106,7 +107,7 @@ impl Application for AppModel {
             programs,
         };
 
-        println!("{:?}", app.config.project_root_path());
+        info!("{:?}", app.config.project_root_path());
 
         let update_title_task = app.update_title();
         let task = Task::batch(vec![
@@ -161,7 +162,7 @@ impl Application for AppModel {
             Message::LaunchUrl(url) => match open::that_detached(&url) {
                 Ok(()) => {}
                 Err(err) => {
-                    eprintln!("failed to open {url:?}: {err}");
+                    error!("failed to open {url:?}: {err}");
                 }
             },
             Message::LaunchProject {
@@ -171,7 +172,7 @@ impl Application for AppModel {
                 let Some(program) = self
                     .programs
                     .iter()
-                    .find(|program| program.name() == &program_name)
+                    .find(|program| program.name() == program_name)
                 else {
                     return Task::none();
                 };
@@ -185,18 +186,17 @@ impl Application for AppModel {
                 let exec = command.next().unwrap();
                 let args: Vec<&str> = command.collect();
 
-                Command::new(exec)
+                let _ = Command::new(exec)
                     .args(args)
                     .stdout(Stdio::null())
                     .stderr(Stdio::null())
-                    .spawn()
-                    .unwrap();
+                    .spawn();
             }
             Message::RootPathInputChanged(path) => {
                 self.root_path_input = path;
             }
             Message::RootPathSave(path) => {
-                println!("saving root path - {:?}", path);
+                info!("saving root path - {:?}", path);
                 let _ = self
                     .config
                     .set_project_root_path(self.config_handler.as_ref().unwrap(), Some(path));
@@ -212,7 +212,7 @@ impl Application for AppModel {
                     self.program_name_input.clone(),
                     self.program_command_input.clone(),
                 );
-                println!("saving program - {:?}", program);
+                info!("saving program - {:?}", program);
 
                 self.programs.push(program);
                 self.program_command_input = "".to_string();
@@ -221,7 +221,7 @@ impl Application for AppModel {
                 self.save_programs();
             }
             Message::ProgramDelete(name) => {
-                self.programs.retain(|program| program.name() != &name);
+                self.programs.retain(|program| program.name() != name);
                 self.save_programs();
             }
             Message::UpdateProjects => {

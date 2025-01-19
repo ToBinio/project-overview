@@ -3,8 +3,6 @@ use crate::domain::program::Program;
 use crate::fl;
 use cosmic::app::context_drawer;
 use cosmic::iced::Alignment;
-use cosmic::iced_core::Theme;
-use cosmic::widget::icon::Handle;
 use cosmic::{cosmic_theme, theme, widget, Element};
 use std::path::PathBuf;
 
