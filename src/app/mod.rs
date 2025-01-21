@@ -7,7 +7,7 @@ use cosmic::app::{context_drawer, Core, Task};
 use cosmic::cosmic_config::{self};
 use cosmic::iced::{Length, Subscription};
 use cosmic::widget::{self, menu};
-use cosmic::{cosmic_theme, theme, Application, ApplicationExt, Element};
+use cosmic::{cosmic_theme, theme, Application, ApplicationExt, Element, Theme};
 use log::{error, info};
 use std::collections::HashMap;
 use std::fs::read_dir;
@@ -31,6 +31,8 @@ pub struct AppModel {
     // Configuration data that persists between application runs.
     config_handler: Option<cosmic_config::Config>,
     config: Config,
+
+    search_text: String,
 
     root_path_input: String,
     program_command_input: String,
@@ -63,6 +65,8 @@ pub enum Message {
         project_name: String,
         program_name: String,
     },
+
+    SearchTextInputChanged(String),
 }
 
 impl Application for AppModel {
@@ -100,6 +104,7 @@ impl Application for AppModel {
             // Optional configuration file for an application.
             config_handler,
             config,
+            search_text: "".to_string(),
             root_path_input: path,
             program_command_input: "".to_string(),
             program_name_input: "".to_string(),
@@ -236,6 +241,9 @@ impl Application for AppModel {
                     .filter_map(|dir| dir.file_name().to_str().map(|name| name.to_string()))
                     .collect();
             }
+            Message::SearchTextInputChanged(text) => {
+                self.search_text = text;
+            }
         }
         Task::none()
     }
@@ -244,13 +252,12 @@ impl Application for AppModel {
         let theme = theme::active();
         let cosmic_theme::Spacing { space_xs, .. } = theme.cosmic().spacing;
 
-        let mut column = widget::Column::new();
+        let input = widget::search_input(fl!("search-input"), &self.search_text)
+            .on_input(Message::SearchTextInputChanged);
 
-        for name in &self.projects {
-            column = column.push(self.project(name));
-        }
-
-        widget::scrollable(column)
+        widget::Column::new()
+            .push(input)
+            .push(self.projects(&theme))
             .spacing(space_xs)
             .width(Length::Fill)
             .height(Length::Fill)
@@ -259,7 +266,34 @@ impl Application for AppModel {
 }
 
 impl AppModel {
-    fn project<'a>(&'a self, project: &'a str) -> Element<'a, Message> {
+    fn filter_projects(&self) -> Vec<String> {
+        if self.search_text.is_empty() {
+            return self.projects.clone();
+        }
+
+        self.projects
+            .iter()
+            .filter(|project| project.contains(self.search_text.as_str()))
+            .cloned()
+            .collect()
+    }
+
+    fn projects(&self, theme: &Theme) -> Element<Message> {
+        let cosmic_theme::Spacing { space_xs, .. } = theme.cosmic().spacing;
+
+        let mut column = widget::Column::new();
+
+        for name in &self.filter_projects() {
+            column = column.push(self.project(name.to_string()));
+        }
+
+        widget::scrollable(column)
+            .spacing(space_xs)
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .into()
+    }
+    fn project(&self, project: String) -> Element<Message> {
         let mut programs = widget::Row::new();
 
         for program in &self.programs {

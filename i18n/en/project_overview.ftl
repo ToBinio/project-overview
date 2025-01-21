@@ -12,3 +12,4 @@ settings-program-command-placeholder = enter program command
 settings-program-name-placeholder = enter program name
 add = add
 
+search-input = enter search
