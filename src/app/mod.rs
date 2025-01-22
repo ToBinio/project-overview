@@ -2,12 +2,14 @@ use crate::app::context_page::ContextPage;
 use crate::app::menu_action::MenuAction;
 use crate::config::Config;
 use crate::domain::program::Program;
+use crate::domain::project::Project;
 use crate::fl;
 use cosmic::app::{context_drawer, Core, Task};
 use cosmic::cosmic_config::{self};
 use cosmic::iced::{Length, Subscription};
 use cosmic::widget::{self, menu};
 use cosmic::{cosmic_theme, theme, Application, ApplicationExt, Element, Theme};
+use iter_tools::Itertools;
 use log::{error, info};
 use std::collections::HashMap;
 use std::fs::read_dir;
@@ -38,7 +40,7 @@ pub struct AppModel {
     program_command_input: String,
     program_name_input: String,
 
-    projects: Vec<String>,
+    projects: Vec<Project>,
     programs: Vec<Program>,
 }
 
@@ -238,7 +240,13 @@ impl Application for AppModel {
 
                 self.projects = result
                     .filter_map(|dir| dir.ok())
-                    .filter_map(|dir| dir.file_name().to_str().map(|name| name.to_string()))
+                    .filter_map(|dir| match dir.try_into() {
+                        Ok(project) => Some(project),
+                        Err(err) => {
+                            error!("{}", err);
+                            None
+                        }
+                    })
                     .collect();
             }
             Message::SearchTextInputChanged(text) => {
@@ -266,15 +274,13 @@ impl Application for AppModel {
 }
 
 impl AppModel {
-    fn filter_projects(&self) -> Vec<String> {
-        if self.search_text.is_empty() {
-            return self.projects.clone();
-        }
-
+    fn filter_projects(&self) -> Vec<&Project> {
         self.projects
             .iter()
-            .filter(|project| project.contains(self.search_text.as_str()))
-            .cloned()
+            .filter(|project| {
+                self.search_text.is_empty() || project.name().contains(&self.search_text)
+            })
+            .sorted_by(|a, b| b.modify().cmp(a.modify()))
             .collect()
     }
 
@@ -283,8 +289,8 @@ impl AppModel {
 
         let mut column = widget::Column::new();
 
-        for name in &self.filter_projects() {
-            column = column.push(self.project(name.to_string()));
+        for project in &self.filter_projects() {
+            column = column.push(self.project(project));
         }
 
         widget::scrollable(column)
@@ -293,20 +299,20 @@ impl AppModel {
             .height(Length::Fill)
             .into()
     }
-    fn project(&self, project: String) -> Element<Message> {
+    fn project(&self, project: &Project) -> Element<Message> {
         let mut programs = widget::Row::new();
 
         for program in &self.programs {
             programs = programs.push(widget::button::text(program.name()).on_press(
                 Message::LaunchProject {
                     program_name: program.name().to_string(),
-                    project_name: project.to_string(),
+                    project_name: project.name().to_string(),
                 },
             ));
         }
 
         widget::Column::new()
-            .push(widget::text::text(project))
+            .push(widget::text::text(project.name().to_string()))
             .push(programs)
             .into()
     }
