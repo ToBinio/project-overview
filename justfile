@@ -39,7 +39,7 @@ clean-dist: clean clean-vendor
 
 # Compiles with debug profile
 build-debug *args:
-    cargo build 
+    cargo build {{args}}
 
 # Compiles with release profile
 build-release *args: (build-debug '--release' args)
@@ -49,25 +49,24 @@ build-vendored *args: vendor-extract (build-release '--frozen --offline' args)
 
 # Runs a clippy check
 check *args:
-    cargo clippy --all-features  -- -W clippy::pedantic
+    cargo clippy --all-features {{args}} -- -W clippy::pedantic
 
 # Runs a clippy check with JSON message format
 check-json: (check '--message-format=json')
 
 # Run the application for testing purposes
 run *args:
-    env RUST_BACKTRACE=full cargo run --release 
-
+    env RUST_BACKTRACE=full cargo run --release {{args}}
 # Installs files
 install:
-    install -Dm0755  
-    install -Dm0644 resources/app.desktop 
-    install -Dm0644 resources/app.metainfo.xml 
-    install -Dm0644  
+    install -Dm0755 {{bin-src}} {{bin-dst}}
+    install -Dm0644 resources/app.desktop {{desktop-dst}}
+    install -Dm0644 resources/app.metainfo.xml {{appdata-dst}}
+    install -Dm0644 {{icon-svg-src}} {{icon-svg-dst}}
 
 # Uninstalls installed files
 uninstall:
-    rm   
+    rm {{bin-dst}} {{desktop-dst}} {{icon-svg-dst}}
 
 # Vendor dependencies locally
 vendor:

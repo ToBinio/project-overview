@@ -35,6 +35,7 @@ pub struct AppModel {
     config: Config,
 
     search_text: String,
+    search_input_id: widget::Id,
 
     root_path_input: String,
     program_command_input: String,
@@ -107,6 +108,7 @@ impl Application for AppModel {
             config_handler,
             config,
             search_text: "".to_string(),
+            search_input_id: widget::Id::unique(),
             root_path_input: path,
             program_command_input: "".to_string(),
             program_name_input: "".to_string(),
@@ -120,6 +122,7 @@ impl Application for AppModel {
         let task = Task::batch(vec![
             update_title_task,
             Task::done(cosmic::app::Message::App(Message::UpdateProjects)),
+            widget::text_input::focus(app.search_input_id.clone()),
         ]);
 
         (app, task)
@@ -261,7 +264,8 @@ impl Application for AppModel {
         let cosmic_theme::Spacing { space_xs, .. } = theme.cosmic().spacing;
 
         let input = widget::search_input(fl!("search-input"), &self.search_text)
-            .on_input(Message::SearchTextInputChanged);
+            .on_input(Message::SearchTextInputChanged)
+            .id(self.search_input_id.clone());
 
         widget::Column::new()
             .push(input)
