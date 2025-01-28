@@ -6,6 +6,7 @@ use cosmic::widget::menu;
 pub enum MenuAction {
     About,
     Settings,
+    FocusSearch,
 }
 
 impl menu::action::MenuAction for MenuAction {
@@ -15,6 +16,7 @@ impl menu::action::MenuAction for MenuAction {
         match self {
             MenuAction::About => Message::OpenContextDrawer(ContextPage::About),
             MenuAction::Settings => Message::OpenContextDrawer(ContextPage::Settings),
+            MenuAction::FocusSearch => Message::FocusSearchInput,
         }
     }
 }

@@ -6,7 +6,9 @@ use crate::domain::project::Project;
 use crate::fl;
 use cosmic::app::{context_drawer, Core, Task};
 use cosmic::cosmic_config::{self};
-use cosmic::iced::{Length, Subscription};
+use cosmic::iced::keyboard::{Key, Modifiers};
+use cosmic::iced::{event, keyboard, Event, Length, Subscription};
+use cosmic::widget::menu::{Action, KeyBind};
 use cosmic::widget::{self, menu};
 use cosmic::{cosmic_theme, theme, Application, ApplicationExt, Element, Theme};
 use iter_tools::Itertools;
@@ -47,6 +49,8 @@ pub struct AppModel {
 
 #[derive(Debug, Clone)]
 pub enum Message {
+    Key(Modifiers, Key),
+
     OpenContextDrawer(ContextPage),
     CloseContextDrawer,
 
@@ -70,6 +74,7 @@ pub enum Message {
     },
 
     SearchTextInputChanged(String),
+    FocusSearchInput,
 }
 
 impl Application for AppModel {
@@ -100,10 +105,20 @@ impl Application for AppModel {
 
         let programs = config.programs().to_vec();
 
+        let mut key_binds = HashMap::new();
+
+        key_binds.insert(
+            KeyBind {
+                modifiers: vec![],
+                key: Key::Character("f".into()),
+            },
+            MenuAction::FocusSearch,
+        );
+
         let mut app = AppModel {
             core,
             context_page: ContextPage::default(),
-            key_binds: HashMap::new(),
+            key_binds: key_binds,
             // Optional configuration file for an application.
             config_handler,
             config,
@@ -122,7 +137,7 @@ impl Application for AppModel {
         let task = Task::batch(vec![
             update_title_task,
             Task::done(cosmic::app::Message::App(Message::UpdateProjects)),
-            widget::text_input::focus(app.search_input_id.clone()),
+            Task::done(cosmic::app::Message::App(Message::FocusSearchInput)),
         ]);
 
         (app, task)
@@ -152,13 +167,32 @@ impl Application for AppModel {
     }
 
     fn subscription(&self) -> Subscription<Self::Message> {
-        self.core()
-            .watch_config::<Config>(Self::APP_ID)
-            .map(|update| Message::UpdateConfig(update.config))
+        let subscriptions = vec![
+            event::listen_with(|event, status, window_id| match event {
+                Event::Keyboard(keyboard::Event::KeyPressed { key, modifiers, .. }) => match status
+                {
+                    event::Status::Ignored => Some(Message::Key(modifiers, key)),
+                    event::Status::Captured => None,
+                },
+                _ => None,
+            }),
+            self.core()
+                .watch_config::<Config>(Self::APP_ID)
+                .map(|update| Message::UpdateConfig(update.config)),
+        ];
+
+        Subscription::batch(subscriptions)
     }
 
     fn update(&mut self, message: Self::Message) -> Task<Self::Message> {
         match message {
+            Message::Key(modifiers, key) => {
+                for (key_bind, action) in self.key_binds.iter() {
+                    if key_bind.matches(modifiers, &key) {
+                        return self.update(action.message());
+                    }
+                }
+            }
             Message::OpenContextDrawer(context_page) => {
                 self.context_page = context_page;
                 self.core.window.show_context = true;
@@ -254,6 +288,9 @@ impl Application for AppModel {
             }
             Message::SearchTextInputChanged(text) => {
                 self.search_text = text;
+            }
+            Message::FocusSearchInput => {
+                return widget::text_input::focus(self.search_input_id.clone())
             }
         }
         Task::none()
